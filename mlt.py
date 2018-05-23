@@ -6,6 +6,7 @@ import sys
 import dialog
 import subprocess
 import paramiko
+import time
 
 class LocalCommand(object):
 
@@ -61,16 +62,17 @@ class RemoteCommand(object):
 class Menu(LocalCommand, RemoteCommand):
 
 
-    def __init__(self, ):
+    def __init__(self, product_name):
 
         super(LocalCommand, self).__init__()
         super(RemoteCommand, self).__init__()
 
         self.role = ""
         self.local_disk = ""
-
+        self.PRODUCT_NAME = product_name
+        self.source_disk_partition_count = 0
         self.my_dialog = dialog.Dialog(dialog="dialog")
-        self.my_dialog.set_background_title(PRODUCT_NAME)
+        self.my_dialog.set_background_title(self.PRODUCT_NAME)
         self.top_menu()
 
 
@@ -90,7 +92,7 @@ class Menu(LocalCommand, RemoteCommand):
 
     def top_menu(self):
         code, tags = self.my_dialog.menu(
-            text=u"欢迎使用 %s ..." % PRODUCT_NAME,
+            text=u"欢迎使用 %s ..." % self.PRODUCT_NAME,
             # height=23,
             # width=76,
             choices=[
@@ -265,6 +267,8 @@ class Menu(LocalCommand, RemoteCommand):
 
         part_list = part_msg.split('\n')[7:]
 
+        self.source_disk_partition_count = len(part_list)
+
         elements = []
         for i in range(len(part_list)):
             p_list = part_list[i].split()
@@ -320,9 +324,26 @@ class Menu(LocalCommand, RemoteCommand):
         elif code == self.my_dialog.CANCEL or code == self.my_dialog.ESC:
             self.source_disk()
 
-    def fs_clone(self):
-        pass
 
+    def _fs_clone_by_part(self, part_name, nc_port):
+        
+        local_clone_cmd = "nc -l %d | gunzip -c | ntfsclone --restore-image --overwrite %s - " % (nc_port, part_name)
+        self.local_cmd(local_clone_cmd)
+        time.sleep(2)
+        remote_clone_cmd = "ntfsclone --save-image --output - %s |gunzip -c |nc %s %d " % (part_name, self.local_ipaddress, nc_port)
+        self.remode_cmd(remote_clone_cmd)
+
+    def fs_clone(self):
+        code, tags = self.my_dialog.yesno(u"是否开始复制？")
+        if code == self.my_dialog.OK:
+            pass
+        elif code == self.my_dialog.CANCEL or code == self.my_dialog.ESC:
+            exit(100)
+
+        for i in range(self.source_disk_partition_count):
+            self._fs_clone_by_part(part_name = self.local_disk+str(i),
+                    nc_port= 5000 + i )
+        
 
     def copy_file(self):
         pass
@@ -334,7 +355,7 @@ if __name__ == '__main__':
     PRODUCT_NAME = "Migration LiveCD Tools"
 
 
-    m = Menu()
+    m = Menu(PRODUCT_NAME)
 
 
 
